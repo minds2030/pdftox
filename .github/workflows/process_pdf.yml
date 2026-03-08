@@ -24,3 +24,9 @@ jobs:
           GAS_URL: ${{ secrets.GAS_URL }} # رابط الـ Web App اللي عملناه فوق
           FILE_ID: ${{ github.event.inputs.fileId }}
         run: node processor.js
+
+      - name: Upload Excel Result
+        uses: actions/upload-artifact@v4
+        with:
+          name: Excel-Result
+          path: Result.xlsx # نفس الاسم اللي في سكريبت الـ node
