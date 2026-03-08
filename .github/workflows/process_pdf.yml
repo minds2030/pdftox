@@ -1,0 +1,26 @@
+name: Massive PDF to Excel Engine
+on:
+  workflow_dispatch:
+    inputs:
+      fileId:
+        description: 'Google Drive File ID'
+        required: true
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install dependencies
+        run: npm install axios exceljs
+        
+      - name: Run Processing Script
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GAS_URL: ${{ secrets.GAS_URL }} # رابط الـ Web App اللي عملناه فوق
+          FILE_ID: ${{ github.event.inputs.fileId }}
+        run: node processor.js
