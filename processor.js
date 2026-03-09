@@ -30,17 +30,22 @@ async function start() {
             console.log(`Sending chunk ${Math.floor(i/chunkSize) + 1} with spatial awareness...`);
 
             // تعريف الـ Prompt داخل الطلب مباشرة لضمان الدقة
-            const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-                model: "llama-3.3-70b-versatile",
-                messages: [{
-                    role: "system", 
-                    content: "You are a spatial data engineer. You will receive JSON elements with text and startIndex. Use the startIndex to detect row breaks and column gaps. If a column is missing in the index sequence, keep it empty \"\"."
-                }, {
-                    role: "user", 
-                    content: `Convert these spatial elements into a 2D JSON array. ${isFirstChunk ? "Include headers in the first row." : "No headers."} Data:\n${JSON.stringify(chunk)}`
-                }],
-                temperature: 0
-            }, {
+            // ... داخل الـ Loop في سكريبت Node.js
+const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+    model: "llama-3.3-70b-versatile",
+    messages: [{
+        role: "system", 
+        content: "You are a professional data formatter. You will receive OCR text that looks like a table with spaces. Your task is to split this text into columns based on the VISUAL GAPS."
+    }, {
+        role: "user", 
+        content: `I have this OCR text. It has columns separated by spaces. 
+        1. Identify the columns by looking at the alignment. 
+        2. If a column is empty, put "" in its place. 
+        3. Return ONLY a 2D JSON array [[...]]. 
+        Text:\n${chunk}`
+    }],
+    temperature: 0
+}, {
                 headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' }
             });
 
