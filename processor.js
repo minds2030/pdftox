@@ -7,82 +7,75 @@ async function start() {
     const groqKey = process.env.GROQ_API_KEY;
 
     try {
-        // 1. جلب بيانات الإحداثيات من جوجل (التي تم تحديثها لترسل JSON)
-        console.log("Fetching spatial data (Indices) from Google OCR...");
+        console.log("Fetching spatial data from Google OCR...");
         const response = await axios.get(`${gasUrl}?fileId=${fileId}`);
-        const elements = response.data; // مصفوفة الـ JSON التي تحتوي على الكلمات والمواقع
+        const elements = response.data;
 
         if (!elements || (typeof elements === 'string' && elements.includes("Error"))) {
-            throw new Error("Failed to get data from Google OCR: " + JSON.stringify(elements));
+            throw new Error("Failed to get data: " + JSON.stringify(elements));
         }
 
-        // 2. تقسيم العناصر لقطع (Chunks)
-        // بما أن العناصر JSON، سنقسمها بعدد الكلمات (مثلاً كل 100 عنصر)
-        const chunkSize = 100; 
+        // تقليل حجم الـ Chunk لضمان عدم حدوث Error في الـ JSON
+        const chunkSize = 50; 
         let finalRows = [];
 
-        console.log(`Processing ${elements.length} spatial elements in chunks...`);
+        console.log(`Processing ${elements.length} elements in chunks...`);
 
         for (let i = 0; i < elements.length; i += chunkSize) {
             const chunk = elements.slice(i, i + chunkSize);
-            const isFirstChunk = (i === 0);
+            const isFirst = (i === 0);
             
-            console.log(`Sending chunk ${Math.floor(i/chunkSize) + 1} with spatial awareness...`);
+            console.log(`Processing Chunk ${Math.floor(i/chunkSize) + 1}...`);
 
-            // تعريف الـ Prompt داخل الطلب مباشرة لضمان الدقة
-            // ... داخل الـ Loop في سكريبت Node.js
-const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-    model: "llama-3.3-70b-versatile",
-    messages: [{
-        role: "system", 
-        content: "You are a professional data formatter. You will receive OCR text that looks like a table with spaces. Your task is to split this text into columns based on the VISUAL GAPS."
-    }, {
-        role: "user", 
-        content: `I have this OCR text. It has columns separated by spaces. 
-        1. Identify the columns by looking at the alignment. 
-        2. If a column is empty, put "" in its place. 
-        3. Return ONLY a 2D JSON array [[...]]. 
-        Text:\n${chunk}`
-    }],
-    temperature: 0
-}, {
+            const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+                model: "llama-3.3-70b-versatile",
+                messages: [{
+                    role: "system", 
+                    content: "Strict JSON Mode: Transform the spatial data into a 2D JSON array. NO CONVERSATION. NO MARKDOWN. ONLY [[row1],[row2]]."
+                }, {
+                    role: "user", 
+                    content: `Rules:
+                    1. Use startIndex to identify column gaps and row breaks.
+                    2. If a column is missing, insert "".
+                    3. Do not change or fix any characters.
+                    Data: ${JSON.stringify(chunk)}`
+                }],
+                temperature: 0,
+                response_format: { "type": "json_object" } // تفعيل وضع الـ JSON الصارم لو الموديل بيدعمه
+            }, {
                 headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' }
             });
 
             let rawContent = res.data.choices[0].message.content;
-            const jsonMatch = rawContent.match(/\[\s*\[[\s\S]*\]\s*\]/);
             
-            if (jsonMatch) {
-                const data = JSON.parse(jsonMatch[0]);
+            // تنظيف صارم لأي حرف بره المصفوفة
+            const match = rawContent.match(/\[\s*\[[\s\S]*\]\s*\]/);
+            if (match) {
+                const data = JSON.parse(match[0]);
                 finalRows.push(...data);
-                console.log(`✅ Chunk ${Math.floor(i/chunkSize) + 1} added.`);
             } else {
-                console.error(`⚠️ Chunk ${Math.floor(i/chunkSize) + 1} invalid format.`);
+                console.error("Critical: Model returned non-JSON content.");
             }
             
-            await new Promise(r => setTimeout(r, 1500)); 
+            await new Promise(r => setTimeout(r, 1000)); 
         }
 
-        // 3. إنشاء ملف إكسيل
         if (finalRows.length > 0) {
-            console.log("Creating Excel file...");
+            console.log("Saving results to Result.xlsx...");
             const workbook = new ExcelJS.Workbook();
             const sheet = workbook.addWorksheet('Data');
-            sheet.addRows(finalRows);
             
-            sheet.getRow(1).font = { bold: true };
-            sheet.getRow(1).fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFD3D3D3' }
-            };
+            // إضافة البيانات مع التأكد من أن كل صف مصفوفة
+            finalRows.forEach(row => {
+                if (Array.isArray(row)) sheet.addRow(row);
+            });
 
             await workbook.xlsx.writeFile('Result.xlsx');
-            console.log("✅ Success! Result.xlsx is ready.");
+            console.log("✅ DONE! Task Completed Successfully.");
         }
 
-    } catch (globalError) {
-        console.error("❌ Global Script Error:", globalError.message);
+    } catch (e) {
+        console.error("❌ ERROR:", e.message);
         process.exit(1);
     }
 }
